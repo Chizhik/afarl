@@ -1,18 +1,9 @@
-import time
-import random
+from network.layer import linear
 import numpy as np
 import tensorflow as tf
-#from logging import getLogger
-#import matplotlib.pyplot as plt
-from .experience import Experience
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname('.'))))
-from network.layer import linear
-from helper import mnist_mask_batch, timeit
-# from environment.environment import Environment
-
-# logger = getLogger(__name__)
 
 
 class Agent(object):
@@ -61,12 +52,6 @@ class Agent(object):
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
 
-        # experience replay memory init
-        observation_dim = self.input_dim - self.n_features
-        self.experience = Experience(conf.batch_size, conf.memory_size,
-                                     self.n_features, self.n_classes, [observation_dim])
-        # # # [self.n_features] should be changed! to real observation dim
-
 
     def build_classifier(self):
         layer = self.clf_inputs = tf.placeholder('float32', [None, self.input_dim],
@@ -111,99 +96,5 @@ class Agent(object):
     def stat(self, array):
         return np.mean(array), np.amin(array), np.amax(array), np.median(array)
 
-    def train(self, tr_data, tr_labels, verbose=True):
-        self.update_target_q_network()
-        total_steps = 0
-        n_acquired_history = []
-        accuracy_history = []
-        history = []
-        reward_history = []
-        lr = self.max_lr
-        clf_lr = self.clf_max_lr
-        for epoch in range(self.n_epoch):
-            for x, label in zip(tr_data, tr_labels):
-                acquired = np.zeros(self.n_features)
-                # add initial state to replay memory
-                if random.random() > 0.5:
-                    self.experience.add(np.zeros(x.shape), acquired, 0, -1, False, label)
-                n_acquired = 0
-                epi_reward = 0
-                terminal = False
-                while not terminal:
-                    # choose action
-                    if total_steps < self.pre_train_steps:
-                        action = self.random_action(acquired)
-                    else:
-                        action = self.choose_action(x, acquired, self.eps, policy=self.policy)
-                    if not self.is_terminal(action):
-                        # feature acquisition
-                        terminal = False
-                        self.update_acquired(acquired, action)
-                        reward = self.r_cost
-                        n_acquired += 1
-                        observed = self.get_observed(x, acquired)
-                    else:
-                        # make a decision (terminal state)
-                        terminal = True
-                        observed = self.get_observed(x, acquired)
-                        prob, pred, correct = self.clf_predict(observed, acquired, label)
-                        prob = prob.reshape(-1)
-                        pred = pred[0]
-                        correct = correct[0]
-                        accuracy_history.append(int(correct))
-                        assert len(acquired.shape) == 1
-                        if correct:
-                            sorted_prob = np.sort(prob)
-                            reward = sorted_prob[-1] - sorted_prob[-2]
-                        else:
-                            reward = self.r_wrong
-                    epi_reward += reward
-                    # save experience
-                    self.experience.add(observed, acquired, reward, action, terminal, label)
-                    if terminal:
-                        if n_acquired == 1 and verbose:
-                            print("label", np.argmax(label))
-                            print("prediction", pred)
-                        break
-                reward_history.append(epi_reward)
-                assert n_acquired == np.sum(acquired)
-                n_acquired_history.append(n_acquired)
-                # sample batch
-                prestates, unmissing_pre, actions_t, rewards, poststates, unmissing, terminals, labels \
-                    = self.experience.sample()
-                s_t = np.concatenate((prestates, unmissing_pre), axis=1)
-                s_t_plus_1 = np.concatenate((poststates, unmissing), axis=1)
-                targets = self.calc_targets(unmissing, s_t_plus_1, poststates, terminals, rewards)
-                # train
-                clf_inputs = np.concatenate((s_t, s_t_plus_1), axis=0)
-                clf_true_class = np.concatenate((labels, labels), axis=0)
 
-                _, _, loss, q_t, clf_accuracy, clf_softmax = self.train_sess_run(targets, actions_t, s_t, lr,
-                                                                                 clf_inputs, clf_true_class,
-                                                                                 clf_lr)
-
-                total_steps += 1
-                if total_steps > self.pre_train_steps and self.eps > self.endE:
-                    self.eps -= self.eps_decay
-
-                # update target network parameter
-                if total_steps % self.update_freq == self.update_freq - 1:
-                    # print("Target Q update")
-                    self.update_target_q_network()
-                if (total_steps + 1) % 100 == 0:
-                    print("------------------(", total_steps + 1, "/",
-                          self.n_epoch * self.train_size, ")------------------")
-                    print("> current eps    :", self.eps)
-                    print("> mean n_acquired:", np.mean(n_acquired_history))
-                    print("> accuracy       :", np.mean(accuracy_history))
-                    print("> reward         :", np.mean(reward_history))
-                    history.append(np.mean(n_acquired_history))
-                    n_acquired_history = []  # reset
-                    accuracy_history = []
-                    reward_history = []
-        print("------------------ train done ------------------")
-        saver = tf.train.Saver()
-        saver.save(self.sess, self.save_path)
-
-        return history
 

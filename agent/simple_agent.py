@@ -5,6 +5,7 @@ import random
 from helper import mnist_mask_batch, timeit
 import os
 from collections import Counter
+from .experience import Experience
 
 
 class SimpleAgent(Agent):
@@ -27,6 +28,12 @@ class SimpleAgent(Agent):
             self.build_training_tensor()
             self.build_classifier()
 
+        # experience replay memory init
+        observation_dim = self.input_dim - self.n_features
+        self.experience = Experience(conf.batch_size, conf.memory_size,
+                                     self.n_features, self.n_classes, [observation_dim])
+        # # # [self.n_features] should be changed! to real observation dim
+
     def build_training_tensor(self):
         # training tensor
         self.lr = tf.placeholder(tf.float32, shape=[])
@@ -42,7 +49,7 @@ class SimpleAgent(Agent):
 
     @timeit
     def train(self, tr_data, tr_labels, verbose=True):
-        self.target_network.run_copy()
+        self.update_target_q_network()
         total_steps = 0
         n_acquired_history = []
         accuracy_history = []
