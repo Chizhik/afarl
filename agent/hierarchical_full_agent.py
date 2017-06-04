@@ -1,7 +1,7 @@
 from .agent import Agent
 from .hierarchical_experience import Hexperience
 from collections import Counter
-from helper import mnist_mask_batch, timeit
+from helper import mnist_mask_batch, timeit, mnist_expand
 import os
 import sys
 import tensorflow as tf
@@ -19,10 +19,11 @@ class HierarchyAgent(Agent):
                  pred_network_w,  # worker
                  target_network_m=None,
                  target_network_w=None,
-                 name='Full_H_Agent_'):
+                 name='H_Agent_'):
         super(HierarchyAgent, self).__init__(sess, conf, name)
 
         # problem
+        self.expand_size = conf.expand_size
         self.height_m = self.width_m = conf.size_manager
         self.height_w = self.width_w = conf.size_worker
         self.width = self.width_m * self.width_w
@@ -132,6 +133,7 @@ class HierarchyAgent(Agent):
         clf_lr = self.clf_max_lr
         for epoch in range(self.n_epoch):
             for x, label in zip(tr_data, tr_labels):
+                x = mnist_expand(x, self.expand_size).flatten()
                 acquired = np.zeros(self.n_features)
                 # add initial state to replay memory
                 if random.random() > 0.5:
@@ -442,8 +444,8 @@ class HierarchyAgent(Agent):
         self.target_network_w.run_copy()
 
     def get_observed(self, x, acquired):
-        if self.data_type == 'mnist' and 2*self.n_features != self.input_dim:
-            mnist_mask = mnist_mask_batch(acquired.reshape(1, -1)).reshape(-1)
+        if self.data_type == 'mnist':
+            mnist_mask = mnist_mask_batch(acquired.reshape(1, -1), self.expand_size).reshape(-1)
             observed = x * mnist_mask
         else:
             observed = x * acquired

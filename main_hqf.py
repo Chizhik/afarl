@@ -18,10 +18,11 @@ flags = tf.app.flags
 flags.DEFINE_string('data_type', 'mnist', 'data set')
 
 # model conf
-flags.DEFINE_integer('n_features', 784, 'feature dimension')
-flags.DEFINE_integer('input_dim', 784*2, 'input dimension')
+flags.DEFINE_integer('expand_size', 2, 'expansion of mnist')
+flags.DEFINE_integer('n_features', 16, 'feature dimension')
+flags.DEFINE_integer('input_dim', 784 + 64, 'input dimension')
 flags.DEFINE_integer('size_manager', 4, 'for MNIST: side of the square for manager')
-flags.DEFINE_integer('size_worker', 7, 'for MNIST: side of the square for worker')
+flags.DEFINE_integer('size_worker', 2, 'for MNIST: side of the square for worker')
 flags.DEFINE_integer('embedded_dim', 50, 'embedded set vector dimension')
 flags.DEFINE_integer('n_classes', 10, 'num of classes')
 flags.DEFINE_integer('memory_size', 100000, 'max size of experience memory')
@@ -42,7 +43,7 @@ flags.DEFINE_integer('pre_train_steps', 1000, 'totally random policy steps')
 flags.DEFINE_boolean('double_q', True, 'double Q')
 
 # QNet
-flags.DEFINE_float('r_cost', -0.001, 'cost for feature acquisition')
+flags.DEFINE_float('r_cost', -0.01, 'cost for feature acquisition')
 flags.DEFINE_float('r_correct', 1, 'reward of correct answer')
 flags.DEFINE_float('r_wrong', -1, 'wrong anwser penalty')
 flags.DEFINE_float('r_repeat', -100, 'acquiring acquired feature penalty')
@@ -87,7 +88,8 @@ def main(*args, **kwargs):
         test_data_labels = test_data.labels
 
     elif conf.data_type == 'mnist':
-        assert conf.input_dim == conf.n_features * 2
+        conf.n_features = 16 * conf.expand_size * conf.expand_size
+        conf.input_dim = 784 * conf.expand_size * conf.expand_size + conf.n_features
         from tensorflow.examples.tutorials.mnist import input_data
         mnist = input_data.read_data_sets('../MNIST_data', one_hot=True)
         train_data = mnist.train
@@ -148,7 +150,7 @@ def main(*args, **kwargs):
                        pred_network_w,
                        target_network_m=target_network_m,
                        target_network_w=target_network_w,
-                       name='Full_H_Agent_' + conf.data_type)
+                       name='H_Agent_' + conf.data_type)
 
         pred_network_m_var = list(pred_network_m.var.values())
         pred_network_w_var = list(pred_network_w.var.values())
