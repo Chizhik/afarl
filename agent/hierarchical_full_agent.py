@@ -75,7 +75,7 @@ class HierarchyAgent(Agent):
         # TODO: check shapes and dimensions of this function
         # print('choose_action: shape of x:', x.shape)
         # print('choose_action: shape of acquired:', acquired.shape)
-        observed = x * acquired
+        observed = self.get_observed(x, acquired)
         inputs = np.concatenate((observed, acquired)).reshape(1, -1)
 
         weights = np.zeros(self.n_actions_m)
