@@ -41,7 +41,7 @@ flags.DEFINE_integer('pre_train_steps', 10000, 'totally random policy steps')
 flags.DEFINE_boolean('double_q', True, 'double Q')
 
 # QNet
-flags.DEFINE_float('r_cost', -0.1, 'cost for feature acquisition')
+flags.DEFINE_float('r_cost', -0.01, 'cost for feature acquisition')
 flags.DEFINE_float('r_correct', 1, 'reward of correct answer')
 flags.DEFINE_float('r_wrong', -1, 'wrong anwser penalty')
 flags.DEFINE_float('r_repeat', -100, 'acquiring acquired feature penalty')
