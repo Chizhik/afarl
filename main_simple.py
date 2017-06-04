@@ -18,6 +18,7 @@ flags = tf.app.flags
 flags.DEFINE_string('data_type', 'mnist', 'data set')
 
 # model conf
+flags.DEFINE_integer('expand_size', 2, 'expansion of mnist')
 flags.DEFINE_integer('n_features', 16, 'feature dimension')
 flags.DEFINE_integer('input_dim', 784 + 16, 'input dimension')
 flags.DEFINE_integer('embedded_dim', 50, 'embedded set vector dimension')
@@ -85,8 +86,8 @@ def main(*args, **kwargs):
         test_data_labels = test_data.labels
 
     elif conf.data_type == 'mnist':
-        conf.n_features = 16
-        conf.input_dim = 784 + conf.n_features
+        conf.n_features = 16 * conf.expand_size * conf.expand_size
+        conf.input_dim = 784 * conf.expand_size * conf.expand_size + conf.n_features
         from tensorflow.examples.tutorials.mnist import input_data
         mnist = input_data.read_data_sets('../MNIST_data', one_hot=True)
         train_data = mnist.train

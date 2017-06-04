@@ -2,7 +2,7 @@ from .agent import Agent
 import numpy as np
 import tensorflow as tf
 import random
-from helper import mnist_mask_batch, timeit
+from helper import mnist_mask_batch, timeit, mnist_expand
 import os
 from collections import Counter
 from .experience import Experience
@@ -17,7 +17,8 @@ class SimpleAgent(Agent):
                  name='SimpleAgent'):
         super(SimpleAgent, self).__init__(sess, conf, name)
 
-        self.n_actions = conf.n_features + 1
+        self.n_actions = self.n_features + 1
+        self.expand_size = conf.expand_size
 
         # network
         self.double_q = conf.double_q
@@ -59,6 +60,7 @@ class SimpleAgent(Agent):
         clf_lr = self.clf_max_lr
         for epoch in range(self.n_epoch):
             for x, label in zip(tr_data, tr_labels):
+                x = mnist_expand(x, self.expand_size).flatten()
                 acquired = np.zeros(self.n_features)
                 # add initial state to replay memory
                 if random.random() > 0.5:
@@ -214,8 +216,9 @@ class SimpleAgent(Agent):
         return action
 
     def get_observed(self, x, acquired):
-        if self.data_type == 'mnist' and 2*self.n_features != self.input_dim:
-            mnist_mask = mnist_mask_batch(acquired.reshape(1, -1)).reshape(-1)
+        if self.data_type == 'mnist':
+            print(self.expand_size)
+            mnist_mask = mnist_mask_batch(acquired.reshape(1, -1), self.expand_size).reshape(-1)
             observed = x * mnist_mask
         else:
             observed = x * acquired

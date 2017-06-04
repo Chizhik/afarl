@@ -42,8 +42,8 @@ def g(n):
 
 mnist_feature_where = [g(i) for i in range(16)]
 
-def mnist_mask_batch(acquired):
-    mask = np.zeros((acquired.shape[0], 784))
+def mnist_mask_batch(acquired, size=1):
+    mask = np.zeros((acquired.shape[0], 784*size*size))
     if np.all(acquired == 0):
         return mask
     axis0, axis1 = np.where(acquired)
@@ -125,5 +125,13 @@ def masking_mnist(list):
 
 def masking_mnist_from_acquired(list):
     acquired_indices = [i for i, v in enumerate(list) if v==1]
-    return masking(acquired_indices)
+    return masking_mnist(acquired_indices)
 
+def mnist_expand(x, size):
+    shape = [28 * size, 28 * size]
+    datum = np.zeros(shape)
+    ind = np.random.randint(size*size)
+    ind_row = ind // size
+    ind_col = ind % size
+    datum[(ind_row*28):(ind_row*28+28), (ind_col*28):(ind_col*28+28)] = x.reshape(28, 28)
+    return datum
