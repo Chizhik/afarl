@@ -217,7 +217,6 @@ class SimpleAgent(Agent):
 
     def get_observed(self, x, acquired):
         if self.data_type == 'mnist':
-            print(self.expand_size)
             mnist_mask = mnist_mask_batch(acquired.reshape(1, -1), self.expand_size).reshape(-1)
             observed = x * mnist_mask
         else:
