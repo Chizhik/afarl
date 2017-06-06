@@ -8,6 +8,7 @@ import tensorflow as tf
 import os
 import time
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 class MnistExpanded(object):
     def __init__(self, sess, name="expanded_clf"):
@@ -118,8 +119,8 @@ class MnistExpanded(object):
         print("Optimization Finished!")
         saver = tf.train.Saver()
         saver.save(self.sess, self.save_path)
-        matplotlib.pyplot.plot(losses)
-        matplotlib.pyplot.savefig('losses' + time.strftime("%Y-%m-%d-%I:%M", time.localtime()) + '.png')
+        plt.plot(losses)
+        plt.savefig('losses' + time.strftime("%Y-%m-%d-%I:%M", time.localtime()) + '.png')
 
     def test(self):
         ckpt = tf.train.get_checkpoint_state(self.save_dir)
