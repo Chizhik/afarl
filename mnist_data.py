@@ -6,6 +6,7 @@ import numpy as np
 from network.ops import *
 import tensorflow as tf
 import os
+import time
 
 
 class MnistExpanded(object):
@@ -96,6 +97,8 @@ class MnistExpanded(object):
     def train(self):
         self.sess.run(self.init)
         step = 1
+        losses = []
+        accs = []
         # Keep training until reach max iterations
         while step * self.batch_size < self.training_iters:
             batch_x, batch_y = self.mnist.train.next_batch(self.batch_size)
@@ -106,6 +109,8 @@ class MnistExpanded(object):
                 # Calculate batch loss and accuracy
                 loss, acc = self.sess.run([self.cost, self.accuracy], feed_dict={self.x: batch_x,
                                                                   self.y: batch_y})
+                losses.append(loss)
+                accs.append(acc)
                 print("Iter " + str(step * self.batch_size) + ", Minibatch Loss= " + \
                       "{:.6f}".format(loss) + ", Training Accuracy= " + \
                       "{:.5f}".format(acc))
@@ -113,6 +118,9 @@ class MnistExpanded(object):
         print("Optimization Finished!")
         saver = tf.train.Saver()
         saver.save(self.sess, self.save_path)
+        plt.figure()
+        plt.plot(range(len(losses)), losses)
+        plt.savefig('losses' + time.strftime("%Y-%m-%d-%I:%M", time.localtime()) + '.png')
 
     def test(self):
         ckpt = tf.train.get_checkpoint_state(self.save_dir)
@@ -125,9 +133,11 @@ class MnistExpanded(object):
         else:
             print(" [!] Load FAILED: %s")
             return False
+        x = self.mnist_expand(self.mnist.test.images[:128], 2)
+        y = self.mnist_expand(self.mnist.test.labels[:128], 2)
         print("Testing Accuracy:", self.sess.run(self.accuracy,
-                                                 feed_dict={self.x: self.mnist.test.images[:1000],
-                                                            self.y: self.mnist.test.labels[:1000]}))
+                                                 feed_dict={self.x: x,
+                                                            self.y: y}))
 
 with tf.Session() as sess:
     a = MnistExpanded(sess)
