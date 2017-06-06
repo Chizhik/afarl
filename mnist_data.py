@@ -134,7 +134,7 @@ class MnistExpanded(object):
             print(" [!] Load FAILED: %s")
             return False
         x = self.mnist_expand(self.mnist.test.images[:128], 2)
-        y = self.mnist_expand(self.mnist.test.labels[:128], 2)
+        y = self.mnist.test.labels[:128]
         print("Testing Accuracy:", self.sess.run(self.accuracy,
                                                  feed_dict={self.x: x,
                                                             self.y: y}))
