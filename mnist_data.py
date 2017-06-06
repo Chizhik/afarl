@@ -44,7 +44,7 @@ class MnistExpanded(object):
         # Initializing the variables
         self.init = tf.global_variables_initializer()
         self.name = name
-        self.save_dir = os.path.relpath(os.path.dirname(__file__))
+        self.save_dir = os.path.dirname(__file__)
         self.save_dir = os.path.join(self.save_dir, "expand")
         self.save_path = os.path.join(self.save_dir, name + '.ckpt')
         if not os.path.exists(self.save_dir):
