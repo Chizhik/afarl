@@ -118,8 +118,7 @@ class MnistExpanded(object):
         print("Optimization Finished!")
         saver = tf.train.Saver()
         saver.save(self.sess, self.save_path)
-        plt.figure()
-        plt.plot(range(len(losses)), losses)
+        plt.plot(losses)
         plt.savefig('losses' + time.strftime("%Y-%m-%d-%I:%M", time.localtime()) + '.png')
 
     def test(self):
