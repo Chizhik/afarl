@@ -1,6 +1,9 @@
 from network.layer import *
-from helper import mnist_mask_batch
+from network.mlp import MLPSmall
+from helper import mnist_mask_batch, mnist_expand
+from .experience import Experience
 import numpy as np
+import random
 import tensorflow as tf
 import sys
 import os
@@ -18,10 +21,11 @@ class CNNAgent(object):
         self.sess = sess
         self.var = {}
         # problem
-        self.input_dim = conf.input_dim  # for example, [28, 28, 1]
+        self.input_dim = conf.input_dim  # for example, [28, 28]
         self.expand_size = conf.expand_size
         # TODO: change conf.n_features to conf.feature_dim
         self.feature_dim = conf.n_features
+        self.n_actions = self.feature_dim + 1
         self.n_classes = conf.n_classes
         self.train_size = conf.train_size
         self.test_size = conf.test_size
@@ -49,6 +53,9 @@ class CNNAgent(object):
         self.r_correct = conf.r_correct
         # classfier
         self.clf_hidden_sizes = conf.clf_hidden_sizes
+        # Q learning network
+        self.double_q = conf.double_q
+        self.Q_hidden_sizes = conf.Q_hidden_sizes
         # for model saving and restoring
         self.name = name
         self.save_dir = os.path.relpath(os.path.dirname(__file__))
@@ -56,6 +63,17 @@ class CNNAgent(object):
         self.save_path = os.path.join(self.save_dir, name + '.ckpt')
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
+        # Experience Replay
+        observation_dim = self.input_dim[0] * self.input_dim[1] - self.feature_dim
+        self.experience = Experience(conf.batch_size, conf.memory_size,
+                                     self.feature_dim, self.n_classes, [observation_dim])
+        # Building stuff
+        with tf.variable_scope(self.name):
+            self.build_conv()
+            self.build_classifier()
+            self.build_agent()
+            self.build_training_tensor()
+
 
     def build_conv(self,
                    weights_initializer=initializers.xavier_initializer(),
@@ -147,6 +165,218 @@ class CNNAgent(object):
                                  self.conv_inputs: conv_in,
                                  self.true_class: labels})
 
+    def build_agent(self):
+        bias_init = tf.constant_initializer(0.1)
+        self.pred_network = MLPSmall(sess=self.sess,
+                                     observation_dims=self.conv_out_dim,  # but we actually don't need this
+                                     output_size=self.n_actions,
+                                     network_output_type='normal',
+                                     biases_initializer=bias_init,
+                                     hidden_sizes=self.Q_hidden_sizes,
+                                     name='pred_network', trainable=True,
+                                     input_tensor=self.conv_out,
+                                     conv_input_placeholder=self.conv_inputs)
+        self.target_network = MLPSmall(sess=self.sess,
+                                       observation_dims=self.conv_out_dim,  # but we actually don't need this
+                                       output_size=self.n_actions,
+                                       network_output_type='normal',
+                                       biases_initializer=bias_init,
+                                       hidden_sizes=self.Q_hidden_sizes,
+                                       name='target_network', trainable=False,
+                                       input_tensor=self.conv_out,
+                                       conv_input_placeholder=self.conv_inputs)
+
+    def build_training_tensor(self):
+        # training tensor
+        self.lr = tf.placeholder(tf.float32, shape=[])
+        self.targets = tf.placeholder('float32', [None], name='target_q_t')
+        self.actions = tf.placeholder('int64', [None], name='action')
+        actions_one_hot = tf.one_hot(self.actions, self.n_actions)
+        pred_q = tf.reduce_sum(self.pred_network.outputs * actions_one_hot,
+                               axis=1, name='q_acted')
+        delta = self.targets - pred_q
+        self.loss = tf.reduce_mean(tf.square(delta))
+        optimizer = tf.train.RMSPropOptimizer(self.lr, momentum=0.95, epsilon=0.01)
+        self.optim = optimizer.minimize(self.loss)
+
+    # TODO: change inputs
+    def train(self, tr_data, tr_labels, verbose=True):
+        self.update_target_q_network()
+        total_steps = 0
+        n_acquired_history = []
+        accuracy_history = []
+        history = []
+        reward_history = []
+        lr = self.max_lr
+        clf_lr = self.clf_max_lr
+        for epoch in range(self.n_epoch):
+            for x, label in zip(tr_data, tr_labels):
+                x = mnist_expand(x, self.expand_size).flatten()
+                acquired = np.zeros(self.feature_dim)
+                # add initial state to replay memory
+                if random.random() > 0.5:
+                    self.experience.add(np.zeros(x.shape), acquired, 0, -1, False, label)
+                n_acquired = 0
+                epi_reward = 0
+                terminal = False
+                while not terminal:
+                    # choose action
+                    if total_steps < self.pre_train_steps:
+                        action = self.random_action(acquired)
+                    else:
+                        action = self.choose_action(x, acquired, self.eps, policy=self.policy)
+                    if not self.is_terminal(action):
+                        # feature acquisition
+                        terminal = False
+                        self.update_acquired(acquired, action)
+                        reward = self.r_cost
+                        n_acquired += 1
+                        observed = self.get_observed(x, acquired)
+                    else:
+                        # make a decision (terminal state)
+                        terminal = True
+                        observed = self.get_observed(x, acquired)
+                        prob, pred, correct = self.clf_predict(observed, acquired, label)
+                        prob = prob.reshape(-1)
+                        pred = pred[0]
+                        correct = correct[0]
+                        accuracy_history.append(int(correct))
+                        assert len(acquired.shape) == 1
+                        if correct:
+                            sorted_prob = np.sort(prob)
+                            reward = sorted_prob[-1] - sorted_prob[-2]
+                        else:
+                            reward = self.r_wrong
+                    epi_reward += reward
+                    # save experience
+                    self.experience.add(observed, acquired, reward, action, terminal, label)
+                    if terminal:
+                        if n_acquired == 1 and verbose:
+                            print("label", np.argmax(label))
+                            print("prediction", pred)
+                        break
+                reward_history.append(epi_reward)
+                assert n_acquired == np.sum(acquired)
+                n_acquired_history.append(n_acquired)
+                # sample batch
+                prestates, unmissing_pre, actions_t, rewards, poststates, unmissing, terminals, labels \
+                    = self.experience.sample()
+                s_t = np.concatenate((prestates, unmissing_pre), axis=1)
+                s_t_plus_1 = np.concatenate((poststates, unmissing), axis=1)
+                targets = self.calc_targets(unmissing, s_t_plus_1, poststates, terminals, rewards)
+                # train
+                clf_inputs = np.concatenate((s_t, s_t_plus_1), axis=0)
+                clf_true_class = np.concatenate((labels, labels), axis=0)
+
+                _, _, loss, q_t, clf_accuracy, clf_softmax = self.train_sess_run(targets, actions_t, s_t, lr,
+                                                                                 clf_inputs, clf_true_class,
+                                                                                 clf_lr)
+
+                total_steps += 1
+                if total_steps > self.pre_train_steps and self.eps > self.endE:
+                    self.eps -= self.eps_decay
+
+                # update target network parameter
+                if total_steps % self.update_freq == self.update_freq - 1:
+                    # print("Target Q update")
+                    self.update_target_q_network()
+                if (total_steps + 1) % 100 == 0:
+                    print("------------------(", total_steps + 1, "/",
+                          self.n_epoch * self.train_size, ")------------------")
+                    print("> current eps    :", self.eps)
+                    print("> mean n_acquired:", np.mean(n_acquired_history))
+                    print("> accuracy       :", np.mean(accuracy_history))
+                    print("> reward         :", np.mean(reward_history))
+                    history.append(np.mean(n_acquired_history))
+                    n_acquired_history = []  # reset
+                    accuracy_history = []
+                    reward_history = []
+        print("------------------ train done ------------------")
+        saver = tf.train.Saver()
+        saver.save(self.sess, self.save_path)
+        return history
+
+    def train_sess_run(self, targets, actions_t, s_t, lr, clf_inputs, clf_true_class, clf_lr):
+        return self.sess.run([self.optim, self.clf_optim,
+                              self.loss,
+                              self.pred_network.outputs,
+                              self.clf_accuracy,
+                              self.clf_softmax],
+                             feed_dict={self.targets: targets,
+                                        self.actions: actions_t,
+                                        self.pred_network.inputs: s_t,
+                                        self.lr: lr,
+                                        self.clf_inputs: clf_inputs,
+                                        self.true_class: clf_true_class,
+                                        self.clf_lr: clf_lr})
+
+    def calc_targets(self, unmissing, s_t_plus_1, poststates, terminals, rewards):
+        ### double DQN
+        mask = np.concatenate((unmissing, np.zeros((unmissing.shape[0], 1))), axis=1)
+        assert self.double_q
+        # calc argmax_a Q_predict(s_{t+1}, a)
+        actions_t_plus_1, _ = self.pred_network.calc_actions(
+            s_t_plus_1,
+            mask,
+            eps=0,
+            policy='eps_greedy')
+        # calc Q_target(s_{t+1}, a_{t+1})
+        targets = self.target_network.calc_outputs_with_idx(
+            s_t_plus_1,
+            [[idx, pred_a] for idx, pred_a in enumerate(actions_t_plus_1)])
+        # calc target value
+        targets = targets * np.where(terminals, 0, 1)
+        targets[np.isnan(targets)] = 0  # <------------ what is this?? 0 x inf
+        return rewards + self.discount * targets
+
+    def update_target_q_network(self):
+        assert self.target_network is not None
+        self.target_network.run_copy()
+
+    def random_action(self, acquired):
+        possible_actions = np.zeros(self.n_actions)
+        possible_actions[:-1] = acquired
+        indices = np.where(possible_actions == 0)[0]
+        return random.choice(indices)
+
+    def choose_action(self, x, acquired, eps, policy='eps_greedy'):
+        observed = self.get_observed(x, acquired)
+        inputs = np.concatenate((observed, acquired)).reshape(1, -1)
+        masking = np.zeros((1, len(acquired)+1))
+        masking[0, :self.feature_dim] = acquired
+        masking[0, self.feature_dim] = 0 # making decision action
+        action, prob = self.pred_network.calc_actions(
+                                            inputs,
+                                            masking,
+                                            policy=policy,
+                                            eps=eps)
+        if policy=="softmax":
+            prob = prob[0]
+            action = np.random.multinomial(1, prob, size=1)[0].argmax()
+        elif policy == 'eps_greedy':
+            action = action[0]
+            if random.random() < eps:
+                #action = random.choice(range(self.n_actions))
+                missing = [i for i, v in enumerate(acquired) if v==0]
+                missing.append(self.n_actions - 1)
+                action = random.choice(missing)
+
+        return action
+
+    def get_observed(self, x, acquired):
+        if self.data_type == 'mnist':
+            mnist_mask = mnist_mask_batch(acquired.reshape(1, -1), self.expand_size).reshape(-1)
+            observed = x * mnist_mask
+        else:
+            observed = x * acquired
+        return observed
+
+    def update_acquired(self, acquired, action):
+        assert acquired[action] != 1
+        acquired[action] = 1
+
+    def is_terminal(self, action):
+        return action == self.n_actions - 1
 
     def stat(self, array):
         return np.mean(array), np.amin(array), np.amax(array), np.median(array)
