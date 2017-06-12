@@ -64,7 +64,7 @@ class CNNAgent(object):
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
         # Experience Replay
-        observation_dim = self.input_dim[0] * self.input_dim[1] - self.feature_dim
+        observation_dim = self.input_dim[0] * self.input_dim[1]
         self.experience = Experience(conf.batch_size, conf.memory_size,
                                      self.feature_dim, self.n_classes, [observation_dim])
         # Building stuff
