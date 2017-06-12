@@ -2,6 +2,7 @@ from network.layer import *
 from network.mlp import MLPSmall
 from helper import mnist_mask_batch, mnist_expand
 from .experience import Experience
+from collections import Counter
 import numpy as np
 import random
 import tensorflow as tf
@@ -399,5 +400,61 @@ class CNNAgent(object):
     def stat(self, array):
         return np.mean(array), np.amin(array), np.amax(array), np.median(array)
 
+    def test(self, data, labels, verbose=False):
+        ckpt = tf.train.get_checkpoint_state(self.save_dir)
+        saver = tf.train.Saver()
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            fname = os.path.join(self.save_dir, ckpt_name)
+            saver.restore(self.sess, fname)
+            print(" [*] Load SUCCESS: %s" % fname)
+        else:
+            print(" [!] Load FAILED: %s")
+            return False
+        acc_history = []
+        n_acquired_history = []
+        for datum, label in zip(data, labels):
+            acquired = np.zeros(self.feature_dim)
+            terminal = False
+            while not terminal:# np.any(acquired==0):
+                # act (feature acquisition)
+                action = self.choose_action(datum, acquired, 0)
+                if action < self.feature_dim:
+                    assert acquired[action] != 1
+                    acquired[action] = 1
+                else:
+                    terminal=True
+            observed = self.get_observed(datum, acquired)
+            prob, pred, correct = self.clf_predict(observed, acquired, label)
+            prob = prob[0]
+            pred = pred[0]
+            correct = correct[0]
 
+            sorted_prob = np.sort(prob)
+            diff = sorted_prob[-1] - sorted_prob[-2]
+            n_acquired = np.sum(acquired)
+            if verbose:
+                print("acquired feature num", n_acquired)
+                print("Diff of first & second largest prob", diff)
+                input()
+            acc_history.append(int(correct))
+            n_acquired_history.append(np.sum(acquired))
+
+        accuracy = np.mean(acc_history)
+        mean_, min_, max_, med_ = self.stat(n_acquired_history)
+        detail = dict(Counter(n_acquired_history))
+        acc_history = np.array(acc_history)
+        n_acquired_history = np.array(n_acquired_history)
+        assert acc_history.shape == n_acquired_history.shape
+        print("Accuracy        : ", accuracy)
+        for i in range(1, self.feature_dim + 1):
+            idx, = np.where(n_acquired_history == i)
+            if idx.shape[0]:
+                print("Accuracy(n_acquired={:02d}):".format(i), np.mean(acc_history[idx]))
+        print("Mean n_acquired : ", mean_)
+        print("Min n_acquired  : ", min_)
+        print("Max n_acquired  : ", max_)
+        print("Med n_acquired  : ", med_)
+        print("Detail          : ", detail)
+        return accuracy, mean_, min_, max_, med_, detail
 
