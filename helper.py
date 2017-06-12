@@ -30,11 +30,11 @@ def timeit_return(method):
     return timed
 
 
-def g(n):
+def g(n, size=1):
     # assert np.any(np.array(range(16)) == n)
-    i = int(n // 4)
-    j = int(n % 4)
-    msk = np.zeros((28, 28), dtype=np.uint8)
+    i = int(n // (4*size))
+    j = int(n % (4*size))
+    msk = np.zeros((28*size, 28*size), dtype=np.uint8)
     msk[7*i: 7*i + 7, 7*j: 7*j + 7] = 1
     msk = msk.reshape(-1)
     a, = np.where(msk==1)
@@ -55,8 +55,8 @@ def mnist_mask_batch(acquired, size=1):
 
     def f_mnist_axis1(x, y):
         if type(x) is not np.ndarray:
-            x = g(x)
-        return np.concatenate((x, g(y)))
+            x = g(x, size)
+        return np.concatenate((x, g(y, size)))
     axis0 = reduce(lambda x, y: f_mnist_axis0(x, y), np.sort(list(cnt)))
     axis1 = reduce(lambda x, y: f_mnist_axis1(x, y), axis1)
 
