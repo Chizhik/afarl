@@ -73,7 +73,7 @@ class CNNAgent(object):
             self.build_classifier()
             self.build_agent()
             self.build_training_tensor()
-
+        self.target_network.create_copy_op(self.pred_network)
 
     def build_conv(self,
                    weights_initializer=initializers.xavier_initializer(),
@@ -211,7 +211,7 @@ class CNNAgent(object):
         clf_lr = self.clf_max_lr
         for epoch in range(self.n_epoch):
             for x, label in zip(tr_data, tr_labels):
-                x = mnist_expand(x, self.expand_size).flatten()
+                x = mnist_expand(x, self.expand_size).ravel()
                 acquired = np.zeros(self.feature_dim)
                 # add initial state to replay memory
                 if random.random() > 0.5:
@@ -235,6 +235,8 @@ class CNNAgent(object):
                     else:
                         # make a decision (terminal state)
                         terminal = True
+                        # TODO: combine following two call to optimize them
+                        # Right now each of them call function mnist_mask_batch
                         observed = self.get_observed(x, acquired)
                         prob, pred, correct = self.clf_predict(observed, acquired, label)
                         prob = prob.reshape(-1)
@@ -261,16 +263,16 @@ class CNNAgent(object):
                 # sample batch
                 prestates, unmissing_pre, actions_t, rewards, poststates, unmissing, terminals, labels \
                     = self.experience.sample()
-                s_t = np.concatenate((prestates, unmissing_pre), axis=1)
-                s_t_plus_1 = np.concatenate((poststates, unmissing), axis=1)
+                s_t = self.get_conv_input_from_obs(prestates, unmissing_pre)
+                s_t_plus_1 = self.get_conv_input_from_obs(poststates, unmissing)
                 targets = self.calc_targets(unmissing, s_t_plus_1, poststates, terminals, rewards)
                 # train
                 clf_inputs = np.concatenate((s_t, s_t_plus_1), axis=0)
                 clf_true_class = np.concatenate((labels, labels), axis=0)
 
-                _, _, loss, q_t, clf_accuracy, clf_softmax = self.train_sess_run(targets, actions_t, s_t, lr,
-                                                                                 clf_inputs, clf_true_class,
-                                                                                 clf_lr)
+                loss, q_t, clf_accuracy, clf_softmax = self.train_sess_run(targets, actions_t, s_t, lr,
+                                                                           clf_inputs, clf_true_class,
+                                                                           clf_lr)
 
                 total_steps += 1
                 if total_steps > self.pre_train_steps and self.eps > self.endE:
@@ -297,18 +299,19 @@ class CNNAgent(object):
         return history
 
     def train_sess_run(self, targets, actions_t, s_t, lr, clf_inputs, clf_true_class, clf_lr):
-        return self.sess.run([self.optim, self.clf_optim,
-                              self.loss,
-                              self.pred_network.outputs,
-                              self.clf_accuracy,
-                              self.clf_softmax],
-                             feed_dict={self.targets: targets,
-                                        self.actions: actions_t,
-                                        self.pred_network.inputs: s_t,
-                                        self.lr: lr,
-                                        self.clf_inputs: clf_inputs,
-                                        self.true_class: clf_true_class,
-                                        self.clf_lr: clf_lr})
+        # optimaze Q net
+        _, loss, q_t = self.sess.run([self.optim, self.loss, self.pred_network.outputs],
+                                     feed_dict={self.targets: targets,
+                                                self.actions: actions_t,
+                                                self.conv_inputs: s_t,
+                                                self.lr: lr})
+        # optimize classifier
+        _, clf_accuracy, clf_softmax = self.sess.run([self.clf_optim, self.clf_accuracy, self.clf_softmax],
+                                                     feed_dict={self.conv_inputs: clf_inputs,
+                                                                self.true_class: clf_true_class,
+                                                                self.clf_lr: clf_lr})
+
+        return loss, q_t, clf_accuracy, clf_softmax
 
     def calc_targets(self, unmissing, s_t_plus_1, poststates, terminals, rewards):
         ### double DQN
@@ -340,8 +343,7 @@ class CNNAgent(object):
         return random.choice(indices)
 
     def choose_action(self, x, acquired, eps, policy='eps_greedy'):
-        observed = self.get_observed(x, acquired)
-        inputs = np.concatenate((observed, acquired)).reshape(1, -1)
+        inputs = self.get_conv_input_from_x(x, acquired)
         masking = np.zeros((1, len(acquired)+1))
         masking[0, :self.feature_dim] = acquired
         masking[0, self.feature_dim] = 0 # making decision action
@@ -364,12 +366,28 @@ class CNNAgent(object):
         return action
 
     def get_observed(self, x, acquired):
-        if self.data_type == 'mnist':
-            mnist_mask = mnist_mask_batch(acquired.reshape(1, -1), self.expand_size).reshape(-1)
-            observed = x * mnist_mask
-        else:
-            observed = x * acquired
-        return observed
+        if len(acquired.shape) == 1:
+            acquired = acquired.reshape(1, -1)
+        mnist_mask = mnist_mask_batch(acquired, self.expand_size).reshape([-1, self.input_dim[0], self.input_dim[1]])
+        x = x.reshape([-1, self.input_dim[0], self.input_dim[1]])
+        observed = x * mnist_mask
+        return observed.ravel()
+
+    def get_conv_input_from_obs(self, datum, acquired):
+        if len(acquired.shape) == 1:
+            acquired = acquired.reshape(1, -1)
+        mnist_mask = mnist_mask_batch(acquired, self.expand_size).reshape([-1, self.input_dim[0], self.input_dim[1]])
+        datum = datum.reshape([-1, self.input_dim[0], self.input_dim[1]])
+        # mnist_mask and inputs now are of shape (example) [64, 56, 56] we need to stack them into shape [64, 56, 56, 2]
+        return np.stack([datum, mnist_mask], axis=3)
+
+    def get_conv_input_from_x(self, x, acquired):
+        if len(acquired.shape) == 1:
+            acquired = acquired.reshape(1, -1)
+        mnist_mask = mnist_mask_batch(acquired, self.expand_size).reshape([-1, self.input_dim[0], self.input_dim[1]])
+        x = x.reshape([-1, self.input_dim[0], self.input_dim[1]])
+        observed = x * mnist_mask
+        return np.stack([observed, mnist_mask], axis=3)
 
     def update_acquired(self, acquired, action):
         assert acquired[action] != 1
