@@ -87,6 +87,8 @@ class SimpleAgent(Agent):
     def train(self, tr_data, tr_labels, verbose=True):
         self.update_target_q_network()
         total_steps = 0
+        # total_steps = self.pre_train_steps # remove after debugging
+        # self.eps = 0.2 # remove after debugging
         n_acquired_history = []
         accuracy_history = []
         history = []
@@ -225,6 +227,10 @@ class SimpleAgent(Agent):
         possible_actions = np.zeros(self.n_actions)
         possible_actions[:-1] = acquired
         indices = np.where(possible_actions == 0)[0]
+        print('Random Action')
+        print(acquired.reshape([8, 8]))
+        print(indices)
+        print('---------------------------------------------------')
         return random.choice(indices)
 
     def choose_action(self, x, acquired, eps, policy='eps_greedy'):
@@ -243,12 +249,16 @@ class SimpleAgent(Agent):
             action = np.random.multinomial(1, prob, size=1)[0].argmax()
         elif policy == 'eps_greedy':
             action = action[0]
+            # print("Epsilon greedy")
             if random.random() < eps:
                 #action = random.choice(range(self.n_actions))
                 missing = [i for i, v in enumerate(acquired) if v==0]
                 missing.append(self.n_actions - 1)
                 action = random.choice(missing)
-
+        print('Choose Action')
+        print(acquired.reshape([8, 8]))
+        print(action)
+        print('---------------------------------------------------')
         return action
 
     def get_observed(self, x, acquired):
