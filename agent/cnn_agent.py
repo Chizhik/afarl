@@ -1,6 +1,5 @@
 from network.layer import *
 from network.mlp import MLPSmall
-from helper import mnist_mask_batch, mnist_expand
 from .experience import Experience
 from collections import Counter
 import numpy as np
@@ -22,7 +21,7 @@ class CNNAgent(object):
         self.sess = sess
         self.var = {}
         # problem
-        self.input_dim = conf.input_dim  # for example, [28, 28]
+        self.input_dim = conf.input_dim  # for example, [56, 56]
         self.expand_size = conf.expand_size
         # TODO: change conf.n_features to conf.feature_dim
         self.feature_dim = conf.n_features
@@ -68,6 +67,12 @@ class CNNAgent(object):
         observation_dim = self.input_dim[0] * self.input_dim[1]
         self.experience = Experience(conf.batch_size, conf.memory_size,
                                      self.feature_dim, self.n_classes, [observation_dim])
+
+        # mnist unit mask
+        self.mnist_unit_mask = [self.unit_mask_create(i) for i in range(self.feature_dim)]
+        self.mnist_unit_mask = np.array(self.mnist_unit_mask)
+        print(self.mnist_unit_mask.shape)
+
         # Building stuff
         with tf.variable_scope(self.name):
             self.build_conv()
@@ -75,6 +80,27 @@ class CNNAgent(object):
             self.build_agent()
             self.build_training_tensor()
         self.target_network.create_copy_op(self.pred_network)
+
+    def mnist_expand(self, x):
+        datum = np.zeros([self.input_dim[0], self.input_dim[1]])
+        ind = np.random.randint(self.expand_size * self.expand_size)
+        ind_row = ind // self.expand_size
+        ind_col = ind % self.expand_size
+        datum[(ind_row * 28):(ind_row * 28 + 28), (ind_col * 28):(ind_col * 28 + 28)] = x.reshape(28, 28)
+        return datum
+
+    def mnist_mask_batch(self, acquired):
+        res = np.zeros([acquired.shape[0], self.input_dim[0], self.input_dim[1]])  # might be changed to np.empty
+        axis0, axis1 = np.where(acquired)
+        res[axis0] = np.sum(self.mnist_unit_mask[axis1], axis=0)
+        return res
+
+    def unit_mask_create(self, n):
+        i = n // (4 * self.expand_size)
+        j = n % (4 * self.expand_size)
+        msk = np.zeros((28*self.expand_size, 28*self.expand_size),  dtype=np.uint8)
+        msk[7 * i: 7 * i + 7, 7 * j: 7 * j + 7] = 1
+        return msk
 
     def build_conv(self,
                    weights_initializer=initializers.xavier_initializer(),
@@ -156,7 +182,7 @@ class CNNAgent(object):
             acquired = acquired.reshape(1, -1)
         if len(labels.shape) == 1:
             labels = labels.reshape(1, -1)
-        mnist_mask = mnist_mask_batch(acquired, self.expand_size).reshape([-1, self.input_dim[0], self.input_dim[1]])
+        mnist_mask = self.mnist_mask_batch(acquired).reshape([-1, self.input_dim[0], self.input_dim[1]])
         inputs = inputs.reshape([-1, self.input_dim[0], self.input_dim[1]])
         # mnist_mask and inputs now are of shape (example) [64, 56, 56] we need to stack them into shape [64, 56, 56, 2]
         conv_in = np.stack([inputs, mnist_mask], axis=3)
@@ -212,7 +238,7 @@ class CNNAgent(object):
         clf_lr = self.clf_max_lr
         for epoch in range(self.n_epoch):
             for x, label in zip(tr_data, tr_labels):
-                x = mnist_expand(x, self.expand_size).ravel()
+                x = self.mnist_expand(x).ravel()
                 acquired = np.zeros(self.feature_dim)
                 # add initial state to replay memory
                 if random.random() > 0.5:
@@ -369,7 +395,7 @@ class CNNAgent(object):
     def get_observed(self, x, acquired):
         if len(acquired.shape) == 1:
             acquired = acquired.reshape(1, -1)
-        mnist_mask = mnist_mask_batch(acquired, self.expand_size).reshape([-1, self.input_dim[0], self.input_dim[1]])
+        mnist_mask = self.mnist_mask_batch(acquired).reshape([-1, self.input_dim[0], self.input_dim[1]])
         x = x.reshape([-1, self.input_dim[0], self.input_dim[1]])
         observed = x * mnist_mask
         return observed.ravel()
@@ -377,7 +403,7 @@ class CNNAgent(object):
     def get_conv_input_from_obs(self, datum, acquired):
         if len(acquired.shape) == 1:
             acquired = acquired.reshape(1, -1)
-        mnist_mask = mnist_mask_batch(acquired, self.expand_size).reshape([-1, self.input_dim[0], self.input_dim[1]])
+        mnist_mask = self.mnist_mask_batch(acquired).reshape([-1, self.input_dim[0], self.input_dim[1]])
         datum = datum.reshape([-1, self.input_dim[0], self.input_dim[1]])
         # mnist_mask and inputs now are of shape (example) [64, 56, 56] we need to stack them into shape [64, 56, 56, 2]
         return np.stack([datum, mnist_mask], axis=3)
@@ -385,7 +411,7 @@ class CNNAgent(object):
     def get_conv_input_from_x(self, x, acquired):
         if len(acquired.shape) == 1:
             acquired = acquired.reshape(1, -1)
-        mnist_mask = mnist_mask_batch(acquired, self.expand_size).reshape([-1, self.input_dim[0], self.input_dim[1]])
+        mnist_mask = self.mnist_mask_batch(acquired).reshape([-1, self.input_dim[0], self.input_dim[1]])
         x = x.reshape([-1, self.input_dim[0], self.input_dim[1]])
         observed = x * mnist_mask
         return np.stack([observed, mnist_mask], axis=3)
@@ -414,6 +440,7 @@ class CNNAgent(object):
         acc_history = []
         n_acquired_history = []
         for datum, label in zip(data, labels):
+            datum = self.mnist_expand(datum).ravel()
             acquired = np.zeros(self.feature_dim)
             terminal = False
             while not terminal:# np.any(acquired==0):

@@ -2,10 +2,11 @@ from .agent import Agent
 import numpy as np
 import tensorflow as tf
 import random
-from helper import mnist_mask_batch, timeit, mnist_expand
+from helper import timeit
 import os
 from collections import Counter
 from .experience import Experience
+import matplotlib.pyplot as plt
 
 
 class SimpleAgent(Agent):
@@ -19,6 +20,11 @@ class SimpleAgent(Agent):
 
         self.n_actions = self.n_features + 1
         self.expand_size = conf.expand_size
+
+        # mnist unit mask
+        self.mnist_unit_mask = [self.unit_mask_create(i) for i in range(self.n_features)]
+        self.mnist_unit_mask = np.array(self.mnist_unit_mask)
+        print(self.mnist_unit_mask.shape)
 
         # network
         self.double_q = conf.double_q
@@ -34,6 +40,35 @@ class SimpleAgent(Agent):
         self.experience = Experience(conf.batch_size, conf.memory_size,
                                      self.n_features, self.n_classes, [observation_dim])
         # # # [self.n_features] should be changed! to real observation dim
+
+    def mnist_expand(self, x):
+        datum = np.zeros([28 * self.expand_size, 28 * self.expand_size])
+        ind = np.random.randint(self.expand_size * self.expand_size)
+        ind_row = ind // self.expand_size
+        ind_col = ind % self.expand_size
+        datum[(ind_row * 28):(ind_row * 28 + 28), (ind_col * 28):(ind_col * 28 + 28)] = x.reshape(28, 28)
+        return datum
+
+    def unit_mask_create(self, n):
+        i = n // (4 * self.expand_size)
+        j = n % (4 * self.expand_size)
+        msk = np.zeros((28*self.expand_size, 28*self.expand_size),  dtype=np.uint8)
+        msk[7 * i: 7 * i + 7, 7 * j: 7 * j + 7] = 1
+        return msk
+
+    def mnist_mask_batch_old(self, acquired):
+        lst = []
+        for i in range(acquired.shape[0]):
+            ones = np.where(acquired[i])[0]
+            msk = np.sum(self.mnist_unit_mask[ones], axis=0)
+            lst.append(msk)
+        return np.array(lst)
+
+    def mnist_mask_batch(self, acquired):
+        res = np.zeros([acquired.shape[0], 28 * self.expand_size, 28 * self.expand_size])  # might be changed to np.empty
+        axis0, axis1 = np.where(acquired)
+        res[axis0] = np.sum(self.mnist_unit_mask[axis1], axis=0)
+        return res
 
     def build_training_tensor(self):
         # training tensor
@@ -60,7 +95,7 @@ class SimpleAgent(Agent):
         clf_lr = self.clf_max_lr
         for epoch in range(self.n_epoch):
             for x, label in zip(tr_data, tr_labels):
-                x = mnist_expand(x, self.expand_size).flatten()
+                x = self.mnist_expand(x).ravel()
                 acquired = np.zeros(self.n_features)
                 # add initial state to replay memory
                 if random.random() > 0.5:
@@ -97,6 +132,7 @@ class SimpleAgent(Agent):
                         else:
                             reward = self.r_wrong
                     epi_reward += reward
+                    # self.print_mask(x, acquired)
                     # save experience
                     self.experience.add(observed, acquired, reward, action, terminal, label)
                     if terminal:
@@ -217,7 +253,7 @@ class SimpleAgent(Agent):
 
     def get_observed(self, x, acquired):
         if self.data_type == 'mnist':
-            mnist_mask = mnist_mask_batch(acquired.reshape(1, -1), self.expand_size).reshape(-1)
+            mnist_mask = self.mnist_mask_batch(acquired.reshape(1, -1)).reshape(-1)
             observed = x * mnist_mask
         else:
             observed = x * acquired
@@ -234,6 +270,25 @@ class SimpleAgent(Agent):
         assert self.target_network is not None
         self.target_network.run_copy()
 
+    def print_mask(self, x, acquired):
+        print(acquired.reshape([8, 8]))
+        plt.figure()
+        plt.imshow(x.reshape(56, 56))
+        plt.show()
+        # mnist_mask_ta = mnist_mask_batch(acquired.reshape(1, -1), self.expand_size)
+        # plt.imshow(mnist_mask_ta.reshape(56, 56))
+        # plt.show()
+        # mnist_mask = self.mnist_mask_batch_old(acquired.reshape(1, -1))
+        # plt.imshow(mnist_mask.reshape(56, 56))
+        # plt.show()
+        mnist_mask2 = self.mnist_mask_batch(acquired.reshape(1, -1))
+        plt.imshow(mnist_mask2.reshape(56, 56))
+        plt.show()
+        # obs = self.get_observed(x, acquired)
+        # plt.imshow(obs.reshape(56, 56))
+        # plt.show()
+
+
     def test(self, data, labels, verbose=False):
         ckpt = tf.train.get_checkpoint_state(self.save_dir)
         saver = tf.train.Saver()
@@ -248,6 +303,7 @@ class SimpleAgent(Agent):
         acc_history = []
         n_acquired_history = []
         for datum, label in zip(data, labels):
+            datum = self.mnist_expand(datum).ravel()
             acquired = np.zeros(self.n_features)
             terminal = False
             while not terminal:# np.any(acquired==0):
