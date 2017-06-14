@@ -95,6 +95,7 @@ def main(*args, **kwargs):
 
         tf.global_variables_initializer().run()
         if conf.is_train:
+            agent.pretrain_clf()
             history = agent.train(train_data_features, train_data_labels,
                                   verbose=conf.verbose)
             plt.figure()

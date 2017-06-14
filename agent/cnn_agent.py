@@ -2,6 +2,7 @@ from network.layer import *
 from network.mlp import MLPSmall
 from .experience import Experience
 from collections import Counter
+from tensorflow.examples.tutorials.mnist import input_data
 import numpy as np
 import random
 import tensorflow as tf
@@ -486,3 +487,36 @@ class CNNAgent(object):
         print("Detail          : ", detail)
         return accuracy, mean_, min_, max_, med_, detail
 
+    def mnist_expand_batch(self, x):
+        shape = [x.shape[0], 28 * self.expand_size, 28 * self.expand_size]
+        datum = np.zeros(shape)
+        ind = np.random.randint(self.expand_size * self.expand_size, size=shape[0])
+        ind_row = ind // self.expand_size
+        ind_col = ind % self.expand_size
+        for i in range(shape[0]):
+            datum[i][(ind_row[i] * 28):(ind_row[i] * 28 + 28), (ind_col[i] * 28):(ind_col[i] * 28 + 28)] = x[i].reshape(28, 28)
+        return datum.reshape(shape[0], -1)
+
+    def pretrain_clf(self, batch_size=64, training_iters=100000):
+        mnist = input_data.read_data_sets('../MNIST_data', one_hot=True)
+        step = 1
+        accs = []
+        # Keep training until reach max iterations
+        while step * batch_size < training_iters:
+            batch_x, batch_y = mnist.train.next_batch(batch_size)
+            batch_x = self.mnist_expand_batch(batch_x)
+            acquired = np.ones([batch_size, self.feature_dim])
+            inputs = self.get_conv_input_from_x(batch_x, acquired)
+            # Run optimization op (backprop)
+            # optimize classifier
+            _, clf_accuracy, clf_softmax = self.sess.run([self.clf_optim, self.clf_accuracy, self.clf_softmax],
+                                                         feed_dict={self.conv_inputs: inputs,
+                                                                    self.true_class: batch_y,
+                                                                    self.clf_lr: self.clf_max_lr})
+            if step % 10 == 0:
+                # Calculate batch loss and accuracy
+                accs.append(clf_accuracy)
+                print("Iter " + str(step * batch_size) + ", Training Accuracy= " + \
+                      "{:.5f}".format(clf_accuracy))
+            step += 1
+        print("Optimization Finished!")
