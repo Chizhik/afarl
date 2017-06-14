@@ -250,15 +250,19 @@ class SimpleAgent(Agent):
         elif policy == 'eps_greedy':
             action = action[0]
             # print("Epsilon greedy")
+            print('Choose Action')
+            print(acquired.reshape([8, 8]))
             if random.random() < eps:
+                print('eps greedy random')
                 #action = random.choice(range(self.n_actions))
-                missing = [i for i, v in enumerate(acquired) if v==0]
-                missing.append(self.n_actions - 1)
+                missing = np.where(masking == 0)[0]
+                # missing = [i for i, v in enumerate(acquired) if v==0]
+                # missing.append(self.n_actions - 1)
                 action = random.choice(missing)
-        print('Choose Action')
-        print(acquired.reshape([8, 8]))
-        print(action)
-        print('---------------------------------------------------')
+                print(action)
+                print('---------------------------------------------------')
+
+
         return action
 
     def get_observed(self, x, acquired):
