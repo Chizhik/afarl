@@ -386,8 +386,9 @@ class CNNAgent(object):
             action = action[0]
             if random.random() < eps:
                 #action = random.choice(range(self.n_actions))
-                missing = [i for i, v in enumerate(acquired) if v==0]
-                missing.append(self.n_actions - 1)
+                missing = np.where(masking == 0)[1]
+                # missing = [i for i, v in enumerate(acquired) if v==0]
+                # missing.append(self.n_actions - 1)
                 action = random.choice(missing)
 
         return action

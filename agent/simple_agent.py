@@ -227,10 +227,10 @@ class SimpleAgent(Agent):
         possible_actions = np.zeros(self.n_actions)
         possible_actions[:-1] = acquired
         indices = np.where(possible_actions == 0)[0]
-        print('Random Action')
-        print(acquired.reshape([8, 8]))
-        print(indices)
-        print('---------------------------------------------------')
+        # print('Random Action')
+        # print(acquired.reshape([8, 8]))
+        # print(indices)
+        # print('---------------------------------------------------')
         return random.choice(indices)
 
     def choose_action(self, x, acquired, eps, policy='eps_greedy'):
@@ -250,17 +250,17 @@ class SimpleAgent(Agent):
         elif policy == 'eps_greedy':
             action = action[0]
             # print("Epsilon greedy")
-            print('Choose Action')
-            print(acquired.reshape([8, 8]))
+            # print('Choose Action')
+            # print(acquired.reshape([8, 8]))
             if random.random() < eps:
-                print('eps greedy random')
+                # print('eps greedy random')
                 #action = random.choice(range(self.n_actions))
-                missing = np.where(masking == 0)[0]
+                missing = np.where(masking == 0)[1]
                 # missing = [i for i, v in enumerate(acquired) if v==0]
                 # missing.append(self.n_actions - 1)
                 action = random.choice(missing)
-                print(action)
-                print('---------------------------------------------------')
+                # print(action)
+                # print('---------------------------------------------------')
 
 
         return action
