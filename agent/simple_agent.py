@@ -2,10 +2,12 @@ from .agent import Agent
 import numpy as np
 import tensorflow as tf
 import random
+import matplotlib
 from helper import timeit
 import os
 from collections import Counter
 from .experience import Experience
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
@@ -287,9 +289,9 @@ class SimpleAgent(Agent):
 
     def print_mask(self, x, acquired):
         print(acquired.reshape([8, 8]))
-        plt.figure()
-        plt.imshow(x.reshape(56, 56))
-        plt.show()
+        # plt.figure()
+        # plt.imshow(x.reshape(56, 56))
+        # plt.show()
         # mnist_mask_ta = mnist_mask_batch(acquired.reshape(1, -1), self.expand_size)
         # plt.imshow(mnist_mask_ta.reshape(56, 56))
         # plt.show()
@@ -319,6 +321,8 @@ class SimpleAgent(Agent):
         n_acquired_history = []
         for datum, label in zip(data, labels):
             datum = self.mnist_expand(datum).ravel()
+            plt.imshow(datum.reshape(56, 56))
+            plt.savefig('test_datum.png')
             acquired = np.zeros(self.n_features)
             terminal = False
             while not terminal:# np.any(acquired==0):
@@ -329,6 +333,7 @@ class SimpleAgent(Agent):
                     acquired[action] = 1
                 else:
                     terminal=True
+                print(acquired.reshape([8,8]))
             observed = self.get_observed(datum, acquired)
             prob, pred, correct = self.clf_predict(observed, acquired, label)
             prob = prob[0]
