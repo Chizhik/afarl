@@ -92,7 +92,7 @@ def main(*args, **kwargs):
     test_data_labels = test_data.labels
 
     with tf.Session() as sess:
-        agent = SCNNAgent(sess, conf, name='SCNNAgent')
+        agent = CNNAgent(sess, conf, name='CNNAgent')
 
         tf.global_variables_initializer().run()
         if conf.is_train:

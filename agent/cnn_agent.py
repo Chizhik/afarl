@@ -226,7 +226,7 @@ class CNNAgent(object):
         delta = self.targets - pred_q
         self.loss = tf.reduce_mean(tf.square(delta))
         optimizer = tf.train.RMSPropOptimizer(self.lr, momentum=0.95, epsilon=0.01)
-        self.optim = optimizer.minimize(self.loss)
+        self.optim = optimizer.minimize(self.loss, var_list=list(self.pred_network.var.values()))
 
     # TODO: change inputs
     def train(self, tr_data, tr_labels, verbose=True):
