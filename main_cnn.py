@@ -9,6 +9,7 @@ from data_simulation import DataSimulate
 from network.cnn import CNN
 from network.mlp import MLPSmall
 from agent.cnn_agent import CNNAgent
+from agent.sep_cnn_agent import SCNNAgent
 from tensorflow.examples.tutorials.mnist import input_data
 from collections import Counter
 import os
@@ -91,11 +92,11 @@ def main(*args, **kwargs):
     test_data_labels = test_data.labels
 
     with tf.Session() as sess:
-        agent = CNNAgent(sess, conf, name='CNNAgent')
+        agent = SCNNAgent(sess, conf, name='SCNNAgent')
 
         tf.global_variables_initializer().run()
         if conf.is_train:
-            agent.pretrain_clf()
+            # agent.pretrain_clf()
             history = agent.train(train_data_features, train_data_labels,
                                   verbose=conf.verbose)
             plt.figure()
