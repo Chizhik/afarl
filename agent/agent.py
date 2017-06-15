@@ -48,6 +48,7 @@ class Agent(object):
         self.name = name
         self.save_dir = os.path.relpath(os.path.dirname(__file__))
         self.save_dir = os.path.join(self.save_dir, conf.save_dir)
+        self.log_path = self.save_dir
         self.save_path = os.path.join(self.save_dir, name + '.ckpt')
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)

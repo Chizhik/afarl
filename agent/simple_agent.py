@@ -86,6 +86,7 @@ class SimpleAgent(Agent):
     @timeit
     def train(self, tr_data, tr_labels, verbose=True):
         self.update_target_q_network()
+        summary_writer = tf.summary.FileWriter(self.log_path, graph=tf.get_default_graph())
         total_steps = 0
         # total_steps = self.pre_train_steps # remove after debugging
         # self.eps = 0.2 # remove after debugging

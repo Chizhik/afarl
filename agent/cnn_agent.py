@@ -61,6 +61,7 @@ class CNNAgent(object):
         self.name = name
         self.save_dir = os.path.relpath(os.path.dirname(__file__))
         self.save_dir = os.path.join(self.save_dir, conf.save_dir)
+        self.log_path = self.save_dir
         self.save_path = os.path.join(self.save_dir, name + '.ckpt')
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
@@ -230,6 +231,7 @@ class CNNAgent(object):
     # TODO: change inputs
     def train(self, tr_data, tr_labels, verbose=True):
         self.update_target_q_network()
+        summary_writer = tf.summary.FileWriter(self.log_path, graph=tf.get_default_graph())
         total_steps = 0
         n_acquired_history = []
         accuracy_history = []
@@ -497,7 +499,7 @@ class CNNAgent(object):
             datum[i][(ind_row[i] * 28):(ind_row[i] * 28 + 28), (ind_col[i] * 28):(ind_col[i] * 28 + 28)] = x[i].reshape(28, 28)
         return datum.reshape(shape[0], -1)
 
-    def pretrain_clf(self, batch_size=64, training_iters=100000):
+    def pretrain_clf(self, batch_size=64, training_iters=20000):
         mnist = input_data.read_data_sets('../MNIST_data', one_hot=True)
         step = 1
         accs = []
