@@ -27,7 +27,7 @@ flags.DEFINE_integer('input_dim', [56, 56], 'input dimension')
 flags.DEFINE_integer('embedded_dim', 50, 'embedded set vector dimension')
 flags.DEFINE_integer('n_classes', 10, 'num of classes')
 flags.DEFINE_integer('memory_size', 100000, 'max size of experience memory')
-flags.DEFINE_string('save_dir', 'saved_mnist', 'where to save the trained model')
+flags.DEFINE_string('save_dir', 'saved_mnist_simple', 'where to save the trained model')
 
 # train
 flags.DEFINE_integer('train_size', 10000, 'num of training samples')
