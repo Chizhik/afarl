@@ -24,7 +24,7 @@ flags.DEFINE_integer('input_dim', 784 + 16, 'input dimension')
 flags.DEFINE_integer('embedded_dim', 50, 'embedded set vector dimension')
 flags.DEFINE_integer('n_classes', 10, 'num of classes')
 flags.DEFINE_integer('memory_size', 100000, 'max size of experience memory')
-flags.DEFINE_string('save_dir', 'saved_mnist', 'where to save the trained model')
+flags.DEFINE_string('save_dir', 'saved_mnist_simple', 'where to save the trained model')
 
 # train
 flags.DEFINE_integer('train_size', 10000, 'num of training samples')
@@ -53,7 +53,7 @@ flags.DEFINE_string('clf_hidden_sizes', '[300, 100, 50]', 'classifier hidden siz
 flags.DEFINE_float('clf_max_lr', 0.001, 'maximum learning rate of clf')
 flags.DEFINE_float('clf_min_lr', 0.001, 'minimum learning rate of clf')
 # else
-flags.DEFINE_boolean('is_train', False, 'do training or not')
+flags.DEFINE_boolean('is_train', True, 'do training or not')
 flags.DEFINE_boolean('agg', True, 'Using agg or not')
 flags.DEFINE_boolean('random_seed', 123, 'Value of random seed')
 flags.DEFINE_boolean('verbose', False, 'verbose or not')
