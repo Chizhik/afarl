@@ -1,15 +1,15 @@
 from .agent import Agent
-from .hierarchical_experience import Hexperience
-from collections import Counter
-from helper import mnist_mask_batch, timeit, mnist_expand
-import os
-import sys
+import numpy as np
 import tensorflow as tf
 import random
-import numpy as np
+import matplotlib
 import scipy.signal
-sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname('.'))))
-
+from helper import timeit
+import os
+from collections import Counter
+from .hierarchical_experience import Hexperience
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 class HierarchyAgent(Agent):
     def __init__(self,
@@ -22,7 +22,6 @@ class HierarchyAgent(Agent):
                  name='H_Agent_'):
         super(HierarchyAgent, self).__init__(sess, conf, name)
 
-        # problem
         self.expand_size = conf.expand_size
         self.height_m = self.width_m = conf.size_manager
         self.height_w = self.width_w = conf.size_worker
@@ -32,7 +31,10 @@ class HierarchyAgent(Agent):
         self.n_actions_w = self.width_w * self.height_w
         assert self.width * self.height == self.n_features
 
-        # network
+        # mnist unit mask
+        self.mnist_unit_mask = [self.unit_mask_create(i) for i in range(self.n_features)]
+        self.mnist_unit_mask = np.array(self.mnist_unit_mask)
+
         self.pred_network_m = pred_network_m
         self.pred_network_w = pred_network_w
         self.target_network_m = target_network_m
@@ -47,6 +49,40 @@ class HierarchyAgent(Agent):
         observation_dim = self.input_dim - self.n_features
         self.experience = Hexperience(conf.batch_size, conf.memory_size,
                                       self.n_features, self.n_classes, [observation_dim])
+
+    def mnist_expand(self, x):
+        datum = np.zeros([28 * self.expand_size, 28 * self.expand_size])
+        ind = np.random.randint(self.expand_size * self.expand_size)
+        ind_row = ind // self.expand_size
+        ind_col = ind % self.expand_size
+        datum[(ind_row * 28):(ind_row * 28 + 28), (ind_col * 28):(ind_col * 28 + 28)] = x.reshape(28, 28)
+        return datum
+
+    def unit_mask_create(self, n):
+        i = n // (4 * self.expand_size)
+        j = n % (4 * self.expand_size)
+        msk = np.zeros((28*self.expand_size, 28*self.expand_size),  dtype=np.uint8)
+        msk[7 * i: 7 * i + 7, 7 * j: 7 * j + 7] = 1
+        return msk
+
+    def mnist_mask_batch_old(self, acquired):
+        lst = []
+        for i in range(acquired.shape[0]):
+            ones = np.where(acquired[i])[0]
+            msk = np.sum(self.mnist_unit_mask[ones], axis=0)
+            lst.append(msk)
+        return np.array(lst)
+
+    def mnist_mask_batch(self, acquired):
+        res = np.zeros([acquired.shape[0], 28 * self.expand_size, 28 * self.expand_size])  # might be changed to np.empty
+        axis0, axis1 = np.where(acquired)
+        res[axis0] = np.sum(self.mnist_unit_mask[axis1], axis=0)
+        return res
+
+    def get_observed(self, x, acquired):
+        mnist_mask = self.mnist_mask_batch(acquired.reshape(1, -1)).reshape(-1)
+        observed = x * mnist_mask
+        return observed
 
     def build_training_tensor(self):
         # training tensor
@@ -72,9 +108,6 @@ class HierarchyAgent(Agent):
         self.optim_w = optimizer_w.minimize(self.loss_w)
 
     def choose_action(self, x, acquired, eps):
-        # TODO: check shapes and dimensions of this function
-        # print('choose_action: shape of x:', x.shape)
-        # print('choose_action: shape of acquired:', acquired.shape)
         observed = self.get_observed(x, acquired)
         inputs = np.concatenate((observed, acquired)).reshape(1, -1)
 
@@ -133,7 +166,7 @@ class HierarchyAgent(Agent):
         clf_lr = self.clf_max_lr
         for epoch in range(self.n_epoch):
             for x, label in zip(tr_data, tr_labels):
-                x = mnist_expand(x, self.expand_size).flatten()
+                x = self.mnist_expand(x).ravel()
                 acquired = np.zeros(self.n_features)
                 # add initial state to replay memory
                 if random.random() > 0.5:
@@ -252,6 +285,135 @@ class HierarchyAgent(Agent):
 
         return history
 
+    def calc_targets(self, observation, acquired, labels):
+        input_m = np.concatenate((observation, acquired), axis=1)
+        # print("argmax_actions: shape of observation and acquired:", observation.shape, acquired.shape)
+        ### double DQN
+        acq = acquired.reshape(-1, self.height, self.width)
+        sample_size = acq.shape[0]
+        masking = np.zeros((sample_size, self.n_actions_m))
+        for i in range(sample_size):
+            masking[i][:-1] = scipy.signal.convolve2d(
+                acquired[i].reshape(self.height, self.width),
+                np.ones((self.height_w, self.width_w)),
+                'valid')[::self.height_w, ::self.width_w].flatten() // (self.height_w * self.width_w)
+            masking[i][-1] = 0  # classification
+        # mask_m = np.concatenate((acquired, np.zeros((acquired.shape[0], 1))), axis=1)
+        assert self.double_q
+        # calc argmax_a Q_predict(s_{t+1}, a)
+        actions_m, _ = self.pred_network_m.calc_actions(
+            input_m,
+            masking,
+            eps=0,
+            policy='eps_greedy')
+        # calc Q_target(s_{t+1}, a_{t+1})
+        terminal_actions = np.where(actions_m == self.n_actions_m-1)
+        lbls = labels[terminal_actions]
+        obs_term = observation[terminal_actions]
+        acq_term = acquired[terminal_actions]
+        prob, _, correct = self.clf_predict(obs_term, acq_term, lbls)
+        sorted_prob = np.sort(prob)
+        diff_prob = sorted_prob[:, -1] - sorted_prob[:, -2]
+        reward_wrong = np.full(correct.shape, self.r_wrong)
+        reward = np.where(correct, diff_prob, reward_wrong)
+        non_terminal_actions = np.where(actions_m != self.n_actions_m-1)
+        targets_m = self.target_network_m.calc_outputs_with_idx(
+            input_m,
+            np.column_stack((np.arange(actions_m.size), actions_m)))
+        targets_w = np.zeros(targets_m.shape)
+        targets_w[terminal_actions] = reward
+        if non_terminal_actions[0].size == 0:
+            return targets_m, targets_w, non_terminal_actions
+        observation_w = observation[non_terminal_actions]
+        acquired_w = acquired[non_terminal_actions]
+        acts_m = actions_m[non_terminal_actions]
+        mask_w = self.to_worker_vector(acts_m, acquired_w, self.height, self.width)
+        onehot = np.zeros((acts_m.size, self.n_actions_m - 1))
+        input_w = np.concatenate((observation_w, onehot, acquired_w), axis=1).reshape(-1, self.input_dim +
+                                                                                      self.n_actions_m - 1)
+        onehot[np.arange(acts_m.size), acts_m] = 1
+        actions_w, _ = self.pred_network_w.calc_actions(input_w,
+                                                        mask_w,
+                                                        policy='eps_greedy',
+                                                        eps=0)
+        targets_w[non_terminal_actions] = self.target_network_w.calc_outputs_with_idx(
+            input_w,
+            np.column_stack((np.arange(actions_w.size), actions_w)))
+        return targets_m, targets_w, non_terminal_actions
+
+
+    # Given manager's action, return part of worker's data
+    def to_worker(self, action_m, data, height, width):
+        ind_row = action_m // self.width_m
+        ind_col = action_m % self.width_m
+        h_w = height // self.height_m  # 14
+        w_w = width // self.width_m  # 14
+        data_w = data.reshape(
+            height,
+            width)[(ind_row * h_w):(ind_row * h_w + h_w), (ind_col * w_w):(ind_col * w_w + w_w)].flatten()
+        # onehot = np.zeros((1, self.n_actions_m - 1))
+        # onehot[action_m] = 1
+        return data_w
+
+    # Given manager's actions, return part of worker's data
+    # data should be of shape [batch, height, width]
+    # TODO: Optimize
+    def to_worker_vector(self, action_m, data, height, width):
+        ind_row = action_m // self.width_m
+        ind_col = action_m % self.width_m
+        data = data.reshape((-1, height, width))
+        h = height // self.height_m  # 14
+        w = width // self.width_m  # 14
+        lst = []
+        for i in range(len(action_m)):
+            lst.append(data[i][(ind_row[i] * h):(ind_row[i] * h + h),
+                       (ind_col[i] * w):(ind_col[i] * w + w)].flatten())
+        return np.array(lst)
+
+    def update_target_q_network(self):
+        assert self.target_network_m is not None
+        assert self.target_network_w is not None
+        self.target_network_m.run_copy()
+        self.target_network_w.run_copy()
+
+    def is_terminal(self, action):
+        return action[0] == self.n_actions_m - 1
+
+    def random_action(self, acquired):
+        masking = np.zeros(self.n_actions_m)
+        masking[:-1] = self.height_w * self.width_w - scipy.signal.convolve2d(
+            acquired.reshape(self.height, self.width),
+            np.ones((self.height_w, self.width_w)),
+            'valid')[::self.height_w, ::self.width_w].flatten()
+        # print(valid_actions.size)
+        masking[-1] = 1  # classification
+        # valid_actions = np.where(masking == 0)[0]
+        # action_m = random.choice(valid_actions)
+        masking = masking / masking.sum()
+        action_m = np.random.multinomial(1, masking, size=1)[0].argmax()
+        action_w = -1  # For terminal action of manager
+        if action_m != self.n_actions_m - 1:
+            #Non-terminal action
+            acquired_w = self.to_worker(action_m, acquired, self.height, self.width)
+            valid_actions = np.where(acquired_w.flatten() == 0)[0]
+            action_w = random.choice(valid_actions)
+        return action_m, action_w
+
+    # Given actions, return index of "acquired" matrix
+    def index(self, action):
+        # Tested!
+        y_m = action[0] // self.width_m
+        x_m = action[0] % self.width_m
+        y_w = action[1] // self.width_w
+        x_w = action[1] % self.width_w
+        return (y_m * self.height_w + y_w) * self.width + x_m * self.width_w + x_w
+
+    def update_acquired(self, acquired, action):
+        acq_idx = self.index(action)
+        # print(action_m, action_w, acq_idx)
+        assert acquired[acq_idx] != 1
+        acquired[acq_idx] = 1
+
     def test(self, data, labels, verbose=False):
         ckpt = tf.train.get_checkpoint_state(self.save_dir)
         saver = tf.train.Saver()
@@ -312,141 +474,3 @@ class HierarchyAgent(Agent):
         print("Med n_acquired  : ", med_)
         print("Detail          : ", detail)
         return accuracy, mean_, min_, max_, med_, detail
-
-    def calc_targets(self, observation, acquired, labels):
-        input_m = np.concatenate((observation, acquired), axis=1)
-        # print("argmax_actions: shape of observation and acquired:", observation.shape, acquired.shape)
-        ### double DQN
-        acq = acquired.reshape(-1, self.height, self.width)
-        sample_size = acq.shape[0]
-        masking = np.zeros((sample_size, self.n_actions_m))
-        for i in range(sample_size):
-            masking[i][:-1] = scipy.signal.convolve2d(
-                acquired[i].reshape(self.height, self.width),
-                np.ones((self.height_w, self.width_w)),
-                'valid')[::self.height_w, ::self.width_w].flatten() // (self.height_w * self.width_w)
-            masking[i][-1] = 0  # classification
-        # mask_m = np.concatenate((acquired, np.zeros((acquired.shape[0], 1))), axis=1)
-        assert self.double_q
-        # calc argmax_a Q_predict(s_{t+1}, a)
-        actions_m, _ = self.pred_network_m.calc_actions(
-            input_m,
-            masking,
-            eps=0,
-            policy='eps_greedy')
-        # calc Q_target(s_{t+1}, a_{t+1})
-        terminal_actions = np.where(actions_m == self.n_actions_m-1)
-        lbls = labels[terminal_actions]
-        obs_term = observation[terminal_actions]
-        acq_term = acquired[terminal_actions]
-        prob, _, correct = self.clf_predict(obs_term, acq_term, lbls)
-        sorted_prob = np.sort(prob)
-        diff_prob = sorted_prob[:, -1] - sorted_prob[:, -2]
-        reward_wrong = np.full(correct.shape, self.r_wrong)
-        reward = np.where(correct, diff_prob, reward_wrong)
-        non_terminal_actions = np.where(actions_m != self.n_actions_m-1)
-        targets_m = self.target_network_m.calc_outputs_with_idx(
-            input_m,
-            np.column_stack((np.arange(actions_m.size), actions_m)))
-        targets_w = np.zeros(targets_m.shape)
-        targets_w[terminal_actions] = reward
-        if non_terminal_actions[0].size == 0:
-            return targets_m, targets_w, non_terminal_actions
-        observation_w = observation[non_terminal_actions]
-        acquired_w = acquired[non_terminal_actions]
-        acts_m = actions_m[non_terminal_actions]
-        mask_w = self.to_worker_vector(acts_m, acquired_w, self.height, self.width)
-        onehot = np.zeros((acts_m.size, self.n_actions_m - 1))
-        input_w = np.concatenate((observation_w, onehot, acquired_w), axis=1).reshape(-1, self.input_dim +
-                                                                                      self.n_actions_m - 1)
-        onehot[np.arange(acts_m.size), acts_m] = 1
-        actions_w, _ = self.pred_network_w.calc_actions(input_w,
-                                                        mask_w,
-                                                        policy='eps_greedy',
-                                                        eps=0)
-        targets_w[non_terminal_actions] = self.target_network_w.calc_outputs_with_idx(
-            input_w,
-            np.column_stack((np.arange(actions_w.size), actions_w)))
-        return targets_m, targets_w, non_terminal_actions
-
-
-    def random_action(self, acquired):
-        # tested!
-        masking = np.zeros(self.n_actions_m)
-        masking[:-1] = self.height_w * self.width_w - scipy.signal.convolve2d(
-            acquired.reshape(self.height, self.width),
-            np.ones((self.height_w, self.width_w)),
-            'valid')[::self.height_w, ::self.width_w].flatten()
-        # print(valid_actions.size)
-        masking[-1] = 1  # classification
-        # valid_actions = np.where(masking == 0)[0]
-        # action_m = random.choice(valid_actions)
-        masking = masking / masking.sum()
-        action_m = np.random.multinomial(1, masking, size=1)[0].argmax()
-        action_w = -1  # For terminal action of manager
-        if action_m != self.n_actions_m - 1:
-            #Non-terminal action
-            acquired_w = self.to_worker(action_m, acquired, self.height, self.width)
-            valid_actions = np.where(acquired_w.flatten() == 0)[0]
-            action_w = random.choice(valid_actions)
-        return action_m, action_w
-
-    def is_terminal(self, action):
-        return action[0] == self.n_actions_m - 1
-
-    # Given manager's actions, return part of worker's data
-    # data should be of shape [batch, height, width]
-    # TODO: Optimize
-    def to_worker_vector(self, action_m, data, height, width):
-        ind_row = action_m // self.width_m
-        ind_col = action_m % self.width_m
-        data = data.reshape((-1, height, width))
-        h = height // self.height_m  # 14
-        w = width // self.width_m  # 14
-        lst = []
-        for i in range(len(action_m)):
-            lst.append(data[i][(ind_row[i] * h):(ind_row[i] * h + h),
-                       (ind_col[i] * w):(ind_col[i] * w + w)].flatten())
-        return np.array(lst)
-
-    # Given manager's action, return part of worker's data
-    def to_worker(self, action_m, data, height, width):
-        ind_row = action_m // self.width_m
-        ind_col = action_m % self.width_m
-        h_w = height // self.height_m  # 14
-        w_w = width // self.width_m  # 14
-        data_w = data.reshape(
-            height,
-            width)[(ind_row * h_w):(ind_row * h_w + h_w), (ind_col * w_w):(ind_col * w_w + w_w)].flatten()
-        # onehot = np.zeros((1, self.n_actions_m - 1))
-        # onehot[action_m] = 1
-        return data_w
-
-    def update_acquired(self, acquired, action):
-        acq_idx = self.index(action)
-        # print(action_m, action_w, acq_idx)
-        assert acquired[acq_idx] != 1
-        acquired[acq_idx] = 1
-
-    # Given actions, return index of "acquired" matrix
-    def index(self, action):
-        # Tested!
-        y_m = action[0] // self.width_m
-        x_m = action[0] % self.width_m
-        y_w = action[1] // self.width_w
-        x_w = action[1] % self.width_w
-        return (y_m * self.height_w + y_w) * self.width + x_m * self.width_w + x_w
-
-    def update_target_q_network(self):
-        assert self.target_network_m is not None
-        assert self.target_network_w is not None
-        self.target_network_m.run_copy()
-        self.target_network_w.run_copy()
-
-    def get_observed(self, x, acquired):
-        if self.data_type == 'mnist':
-            mnist_mask = mnist_mask_batch(acquired.reshape(1, -1), self.expand_size).reshape(-1)
-            observed = x * mnist_mask
-        else:
-            observed = x * acquired
-        return observed
