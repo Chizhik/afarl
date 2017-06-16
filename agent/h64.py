@@ -428,6 +428,7 @@ class HierarchyAgent(Agent):
         acc_history = []
         n_acquired_history = []
         for datum, label in zip(data, labels):
+            datum = self.mnist_expand(datum).ravel()
             acquired = np.zeros(self.n_features)
             terminal = False
             while not terminal:# np.any(acquired==0):
