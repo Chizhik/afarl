@@ -442,7 +442,7 @@ class HierarchyAgent(Agent):
                     acquired[acq_idx] = 1
                 else:
                     terminal = True
-            observed = datum * acquired
+            observed = self.get_observed(datum, acquired)
             prob, pred, correct = self.clf_predict(observed, acquired, label)
             prob = prob[0]
             pred = pred[0]
