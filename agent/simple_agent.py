@@ -333,8 +333,8 @@ class SimpleAgent(Agent):
                     acquired[action] = 1
                 else:
                     terminal=True
-                print(acquired.reshape([8,8]))
-                input('press any key to continue')
+                # print(acquired.reshape([8,8]))
+                # input('press any key to continue')
             observed = self.get_observed(datum, acquired)
             prob, pred, correct = self.clf_predict(observed, acquired, label)
             prob = prob[0]

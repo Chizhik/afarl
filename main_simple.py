@@ -53,7 +53,7 @@ flags.DEFINE_string('clf_hidden_sizes', '[300, 100, 50]', 'classifier hidden siz
 flags.DEFINE_float('clf_max_lr', 0.001, 'maximum learning rate of clf')
 flags.DEFINE_float('clf_min_lr', 0.001, 'minimum learning rate of clf')
 # else
-flags.DEFINE_boolean('is_train', True, 'do training or not')
+flags.DEFINE_boolean('is_train', False, 'do training or not')
 flags.DEFINE_boolean('agg', True, 'Using agg or not')
 flags.DEFINE_boolean('random_seed', 123, 'Value of random seed')
 flags.DEFINE_boolean('verbose', False, 'verbose or not')

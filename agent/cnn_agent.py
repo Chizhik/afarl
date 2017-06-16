@@ -233,6 +233,8 @@ class CNNAgent(object):
         self.update_target_q_network()
         summary_writer = tf.summary.FileWriter(self.log_path, graph=tf.get_default_graph())
         total_steps = 0
+        total_steps = self.pre_train_steps # remove after debugging
+        self.eps = 0.2 # remove after debugging
         n_acquired_history = []
         accuracy_history = []
         history = []
@@ -387,12 +389,17 @@ class CNNAgent(object):
             action = np.random.multinomial(1, prob, size=1)[0].argmax()
         elif policy == 'eps_greedy':
             action = action[0]
+            print("Epsilon greedy")
+            print(acquired.reshape([8, 8]))
             if random.random() < eps:
+                print('eps greedy random')
                 #action = random.choice(range(self.n_actions))
                 missing = np.where(masking == 0)[1]
                 # missing = [i for i, v in enumerate(acquired) if v==0]
                 # missing.append(self.n_actions - 1)
                 action = random.choice(missing)
+                print(action)
+                print('---------------------------------------------------')
 
         return action
 
