@@ -321,8 +321,8 @@ class SimpleAgent(Agent):
         n_acquired_history = []
         for datum, label in zip(data, labels):
             datum = self.mnist_expand(datum).ravel()
-            plt.imshow(datum.reshape(56, 56))
-            plt.savefig('test_datum.png')
+            # plt.imshow(datum.reshape(56, 56))
+            # plt.savefig('test_datum.png')
             acquired = np.zeros(self.n_features)
             terminal = False
             while not terminal:# np.any(acquired==0):

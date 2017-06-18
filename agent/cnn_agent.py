@@ -390,6 +390,7 @@ class CNNAgent(object):
         elif policy == 'eps_greedy':
             action = action[0]
             print("Epsilon greedy")
+            print(action)
             print(acquired.reshape([8, 8]))
             if random.random() < eps:
                 print('eps greedy random')
