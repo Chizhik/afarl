@@ -18,7 +18,7 @@ flags.DEFINE_integer('memory_size', 100000, 'max size of experience memory')
 flags.DEFINE_string('save_dir', 'saved_mnist_h64', 'where to save the trained model')
 
 # train
-flags.DEFINE_integer('train_size', 10000, 'num of training samples')
+flags.DEFINE_integer('train_size', 60000, 'num of training samples')
 flags.DEFINE_integer('test_size', 2000, 'num of test samples')
 flags.DEFINE_integer('batch_size', 100, 'batch size for training')
 flags.DEFINE_integer('n_epoch', 3, 'num of epoch')
@@ -27,8 +27,8 @@ flags.DEFINE_string('policy', 'eps_greedy', '[eps_greedy, softmax]')
 flags.DEFINE_integer('target_update_freq', 30, 'target Q update')
 flags.DEFINE_float('eps_start', 1, 'eps greedy start')
 flags.DEFINE_float('eps_end', 0.1, 'eps greedy end')
-flags.DEFINE_integer('anneling_steps', 40000, 'anneling steps for eps')
-flags.DEFINE_integer('pre_train_steps', 1000, 'totally random policy steps')
+flags.DEFINE_integer('anneling_steps', 60000, 'anneling steps for eps')
+flags.DEFINE_integer('pre_train_steps', 30000, 'totally random policy steps')
 flags.DEFINE_boolean('double_q', True, 'double Q')
 
 # QNet
