@@ -1,0 +1,2 @@
+model_checkpoint_path: "H_Agent_mnist.ckpt"
+all_model_checkpoint_paths: "H_Agent_mnist.ckpt"
