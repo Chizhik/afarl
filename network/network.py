@@ -109,10 +109,10 @@ class Network(object):
 
   def calc_actions(self, inputs, acquired, policy='softmax', eps=1):
     outputs = self.calc_outputs(inputs)
-    print(outputs.reshape([8,8]))
+    # print(outputs.reshape([8,8]))
     filtered_outputs = np.where(acquired, -np.inf, outputs)
-    print(filtered_outputs.reshape([8,8]))
-    print("================================================")
+    # print(filtered_outputs.reshape([8,8]))
+    # print("================================================")
     if policy=='softmax':
         softmax, actions = self.sess.run(
                 [self.softmax, self.actions_with_acqired],

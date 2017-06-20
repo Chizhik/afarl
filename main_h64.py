@@ -27,8 +27,8 @@ flags.DEFINE_string('policy', 'eps_greedy', '[eps_greedy, softmax]')
 flags.DEFINE_integer('target_update_freq', 30, 'target Q update')
 flags.DEFINE_float('eps_start', 1, 'eps greedy start')
 flags.DEFINE_float('eps_end', 0.1, 'eps greedy end')
-flags.DEFINE_integer('anneling_steps', 60000, 'anneling steps for eps')
-flags.DEFINE_integer('pre_train_steps', 30000, 'totally random policy steps')
+flags.DEFINE_integer('anneling_steps', 20000, 'anneling steps for eps')
+flags.DEFINE_integer('pre_train_steps', 10000, 'totally random policy steps')
 flags.DEFINE_boolean('double_q', True, 'double Q')
 
 # QNet

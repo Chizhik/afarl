@@ -199,7 +199,7 @@ class HierarchyAgent(Agent):
                         assert len(acquired.shape) == 1
                         if correct:
                             sorted_prob = np.sort(prob)
-                            reward = sorted_prob[-1] - sorted_prob[-2]
+                            reward = 2*(sorted_prob[-1] - sorted_prob[-2])
                         else:
                             reward = self.r_wrong
                     epi_reward += reward
@@ -411,7 +411,9 @@ class HierarchyAgent(Agent):
     def update_acquired(self, acquired, action):
         acq_idx = self.index(action)
         # print(action_m, action_w, acq_idx)
-        assert acquired[acq_idx] != 1
+        if acquired[acq_idx] == 1:
+            print(action)
+            assert False
         acquired[acq_idx] = 1
 
     def test(self, data, labels, verbose=False):

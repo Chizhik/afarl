@@ -133,7 +133,7 @@ class SimpleAgent(Agent):
                         assert len(acquired.shape) == 1
                         if correct:
                             sorted_prob = np.sort(prob)
-                            reward = sorted_prob[-1] - sorted_prob[-2]
+                            reward = 2*(sorted_prob[-1] - sorted_prob[-2])
                         else:
                             reward = self.r_wrong
                     epi_reward += reward
@@ -277,7 +277,9 @@ class SimpleAgent(Agent):
         return observed
 
     def update_acquired(self, acquired, action):
-        assert acquired[action] != 1
+        if acquired[action] == 1:
+            print(action)
+            assert False
         acquired[action] = 1
 
     def is_terminal(self, action):
