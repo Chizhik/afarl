@@ -133,7 +133,7 @@ class SimpleAgent(Agent):
                         assert len(acquired.shape) == 1
                         if correct:
                             sorted_prob = np.sort(prob)
-                            reward = 2*(sorted_prob[-1] - sorted_prob[-2])
+                            reward = 10*(sorted_prob[-1] - sorted_prob[-2])
                         else:
                             reward = self.r_wrong
                     epi_reward += reward

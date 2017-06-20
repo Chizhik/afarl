@@ -199,7 +199,7 @@ class HierarchyAgent(Agent):
                         assert len(acquired.shape) == 1
                         if correct:
                             sorted_prob = np.sort(prob)
-                            reward = 2*(sorted_prob[-1] - sorted_prob[-2])
+                            reward = 10*(sorted_prob[-1] - sorted_prob[-2])
                         else:
                             reward = self.r_wrong
                     epi_reward += reward
@@ -313,7 +313,7 @@ class HierarchyAgent(Agent):
         acq_term = acquired[terminal_actions]
         prob, _, correct = self.clf_predict(obs_term, acq_term, lbls)
         sorted_prob = np.sort(prob)
-        diff_prob = sorted_prob[:, -1] - sorted_prob[:, -2]
+        diff_prob = 10*(sorted_prob[:, -1] - sorted_prob[:, -2])
         reward_wrong = np.full(correct.shape, self.r_wrong)
         reward = np.where(correct, diff_prob, reward_wrong)
         non_terminal_actions = np.where(actions_m != self.n_actions_m-1)
