@@ -233,8 +233,8 @@ class CNNAgent(object):
         self.update_target_q_network()
         summary_writer = tf.summary.FileWriter(self.log_path, graph=tf.get_default_graph())
         total_steps = 0
-        total_steps = self.pre_train_steps # remove after debugging
-        self.eps = 0.2 # remove after debugging
+        # total_steps = self.pre_train_steps # remove after debugging
+        # self.eps = 0.2 # remove after debugging
         n_acquired_history = []
         accuracy_history = []
         history = []
