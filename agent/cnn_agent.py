@@ -389,18 +389,18 @@ class CNNAgent(object):
             action = np.random.multinomial(1, prob, size=1)[0].argmax()
         elif policy == 'eps_greedy':
             action = action[0]
-            print("Epsilon greedy")
-            print(action)
-            print(acquired.reshape([8, 8]))
+            # print("Epsilon greedy")
+            # print(action)
+            # print(acquired.reshape([8, 8]))
             if random.random() < eps:
-                print('eps greedy random')
+                # print('eps greedy random')
                 #action = random.choice(range(self.n_actions))
                 missing = np.where(masking == 0)[1]
                 # missing = [i for i, v in enumerate(acquired) if v==0]
                 # missing.append(self.n_actions - 1)
                 action = random.choice(missing)
-                print(action)
-                print('---------------------------------------------------')
+                # print(action)
+                # print('---------------------------------------------------')
 
         return action
 
